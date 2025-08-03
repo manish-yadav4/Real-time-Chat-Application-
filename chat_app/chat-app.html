@@ -1,0 +1,262 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Backend simulation using Socket.io
+    function initializeServer() {
+      // Mock server simulation
+      const io = window.io;
+      const server = io('https://socket-io-chat-app-example.herokuapp.com/');
+      
+      // In a real app, you would separate this into a backend server file
+      // This is just for demonstration in a single HTML file
+
+      return server;
+    }
+
+    const ChatApp = () => {
+      const [socket, setSocket] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [message, setMessage] = useState('');
+      const [username, setUsername] = useState('');
+      const [typingUsers, setTypingUsers] = useState([]);
+      const [isTyping, setIsTyping] = useState(false);
+      const messagesEndRef = useRef(null);
+      const typingTimeoutRef = useRef(null);
+      const usernameInputRef = useRef(null);
+
+      useEffect(() => {
+        const newSocket = initializeServer();
+        setSocket(newSocket);
+
+        newSocket.on('connect', () => {
+          console.log('Connected to server');
+        });
+
+        newSocket.on('chat message', (msg) => {
+          setMessages(prev => [...prev, msg]);
+        });
+
+        newSocket.on('user typing', (users) => {
+          setTypingUsers(users.filter(u => u !== username));
+        });
+
+        newSocket.on('user connected', (name) => {
+          setMessages(prev => [...prev, {
+            username: 'System',
+            message: `${name} has joined the chat`,
+            isSystem: true
+          }]);
+        });
+
+        newSocket.on('user disconnected', (name) => {
+          setMessages(prev => [...prev, {
+            username: 'System',
+            message: `${name} has left the chat`,
+            isSystem: true
+          }]);
+        });
+
+        return () => {
+          newSocket.disconnect();
+        };
+      }, [username]);
+
+      useEffect(() => {
+        scrollToBottom();
+      }, [messages]);
+
+      useEffect(() => {
+        if (socket) {
+          if (isTyping) {
+            socket.emit('typing', username);
+          } else {
+            socket.emit('stop typing', username);
+          }
+        }
+      }, [isTyping, socket, username]);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (message.trim() && username) {
+          const newMessage = { username, message };
+          socket.emit('chat message', newMessage);
+          setMessage('');
+          setIsTyping(false);
+        }
+      };
+
+      const handleKeyDown = () => {
+        if (!isTyping) {
+          setIsTyping(true);
+        }
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+        }, 2000);
+      };
+
+      const handleUsernameSubmit = (e) => {
+        e.preventDefault();
+        const name = usernameInputRef.current.value.trim();
+        if (name) {
+          setUsername(name);
+          if (socket) {
+            socket.emit('user connected', name);
+          }
+        }
+      };
+
+      const formatTime = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      };
+
+      if (!username) {
+        return (
+          <div className="flex items-center justify-center h-screen bg-gray-800 p-4">
+            <div className="bg-gray-700 rounded-lg p-6 shadow-xl w-full max-w-md">
+              <div className="flex justify-center mb-6">
+                <img 
+                  src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8fdca993-6298-4893-ab39-734bb37ccc1d.png" 
+                  alt="Chat application logo featuring a stylized speech bubble with gradient colors and a modern flat design" 
+                  className="rounded-full h-24 w-24"
+                />
+              </div>
+              <h1 className="text-2xl font-bold text-center mb-6 text-blue-400">Welcome to Real-Time Chat</h1>
+              <form onSubmit={handleUsernameSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium mb-1">Choose a username</label>
+                  <input
+                    type="text"
+                    id="username"
+                    ref={usernameInputRef}
+                    className="w-full px-4 py-2 rounded-md bg-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter your name"
+                    required
+                    maxLength="20"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition duration-200"
+                >
+                  Join Chat
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex flex-col h-screen">
+          <header className="bg-gray-800 p-4 shadow-md">
+            <div className="container mx-auto flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <img 
+                  src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/febb31ed-8801-4f4c-b903-501790e113f7.png" 
+                  alt="Small circular logo of the chat application with purple and blue gradient"
+                  className="h-8 w-8 rounded-full"
+                />
+                <h1 className="text-xl font-bold">Real-Time Chat</h1>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="h-3 w-3 rounded-full bg-green-500"></div>
+                <span className="text-sm">{username}</span>
+              </div>
+            </div>
+          </header>
+
+          <div className="container mx-auto flex-1 flex flex-col p-4 overflow-hidden max-w-4xl">
+            <div className="bg-gray-800 rounded-lg overflow-hidden flex-1 flex flex-col shadow-lg">
+              <div className="messages-container flex-1 overflow-y-auto p-4">
+                {messages.map((msg, index) => (
+                  <div 
+                    key={index} 
+                    className={`mb-4 ${msg.isSystem ? 'text-center text-gray-400 text-sm' : ''}`}
+                  >
+                    {msg.isSystem ? (
+                      <span>{msg.message}</span>
+                    ) : (
+                      <div className={`flex ${msg.username === username ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-xs lg:max-w-md xl:max-w-lg rounded-lg p-3 ${msg.username === username ? 'bg-blue-600 rounded-br-none' : 'bg-gray-700 rounded-bl-none'}`}>
+                          {msg.username !== username && (
+                            <p className="font-bold text-sm mb-1">{msg.username}</p>
+                          )}
+                          <p className="text-white">{msg.message}</p>
+                          <p className="text-xs opacity-70 text-right mt-1">
+                            {formatTime(Date.now())}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {typingUsers.length > 0 && (
+                  <div className="mt-2 ml-2 text-sm text-gray-400">
+                    {typingUsers.join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...
+                    <div className="flex space-x-1 mt-1">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="w-2 h-2 rounded-full bg-gray-400 typing-indicator" style={{ animationDelay: `${i * 0.2}s` }}></div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-4 bg-gray-700 border-t border-gray-600">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="w-full bg-gray-600 text-white rounded-full py-3 px-5 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Type your message..."
+                    disabled={!socket}
+                  />
+                  <button
+                    type="submit"
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 focus:outline-none"
+                    disabled={!message.trim() || !socket}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ChatApp />);
+  </script>
+</body>
+</html>
+
